@@ -20,7 +20,7 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'JK Maru Gothic';
     background: linear-gradient(135deg, var(--chocolate-dark) 0%, var(--chocolate-medium) 100%);
     color: var(--text-light);
     overflow: hidden;
