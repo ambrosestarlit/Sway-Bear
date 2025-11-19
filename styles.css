@@ -45,6 +45,7 @@ body {
 }
 
 .header h1 {
+    font-family: 'JK Maru Gothic';
     font-size: 24px;
     font-weight: bold;
     color: var(--cream);
