@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>風揺れエフェクト エディター</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- ヘッダー -->
+        <header class="header">
+            <h1>🍃 風揺れエフェクト エディター</h1>
+            <div class="header-controls">
+                <button id="loadImagesBtn" class="primary-button">📁 画像を読み込む</button>
+                <button id="exportBtn" class="primary-button">💾 連番PNG書き出し</button>
+            </div>
+        </header>
+
+        <!-- メインコンテンツ -->
+        <div class="main-content">
+            <!-- プレビューエリア -->
+            <div class="preview-area">
+                <div class="preview-header">
+                    <div class="preview-controls">
+                        <button id="playBtn" class="control-button">▶️ 再生</button>
+                        <button id="pauseBtn" class="control-button">⏸️ 一時停止</button>
+                        <button id="stopBtn" class="control-button">⏹️ 停止</button>
+                        <span class="time-display" id="timeDisplay">0.00s / 0.00s</span>
+                    </div>
+                    <div class="zoom-controls">
+                        <label>ズーム:</label>
+                        <button id="zoomFitBtn" class="zoom-button">Fit</button>
+                        <button id="zoom100Btn" class="zoom-button">100%</button>
+                        <input type="range" id="zoomSlider" min="10" max="200" value="100" step="1">
+                        <span id="zoomValue">100%</span>
+                    </div>
+                </div>
+                <div class="canvas-container" id="canvasContainer">
+                    <canvas id="previewCanvas"></canvas>
+                </div>
+                <div class="timeline-controls">
+                    <input type="range" id="timelineSlider" min="0" max="100" value="0" step="0.01">
+                </div>
+            </div>
+
+            <!-- プロパティパネル -->
+            <div class="properties-panel">
+                <h2>プロパティ</h2>
+                
+                <!-- 画像リスト -->
+                <div class="property-section">
+                    <h3>🎨 レイヤー</h3>
+                    <div id="imageList" class="image-list">
+                        <p class="empty-message">画像が読み込まれていません</p>
+                    </div>
+                    <div class="layer-info">
+                        <small>💡 下のレイヤーが手前に表示されます</small>
+                    </div>
+                </div>
+
+                <!-- 再生設定 -->
+                <div class="property-section">
+                    <h3>⏱️ 再生設定</h3>
+                    <div class="property-row">
+                        <label>FPS:</label>
+                        <select id="fpsSelect">
+                            <option value="24">24 fps</option>
+                            <option value="30" selected>30 fps</option>
+                            <option value="60">60 fps</option>
+                        </select>
+                    </div>
+                    <div class="property-row">
+                        <label>再生時間 (秒):</label>
+                        <input type="number" id="durationInput" value="5" min="0.1" max="60" step="0.1">
+                    </div>
+                </div>
+
+                <!-- 風揺れエフェクト設定 -->
+                <div class="property-section">
+                    <h3>🍃 風揺れエフェクト</h3>
+                    
+                    <div class="property-row">
+                        <label>プリセット:</label>
+                        <select id="presetSelect">
+                            <option value="custom">カスタム</option>
+                            <option value="gentle_breeze">優しい風</option>
+                            <option value="moderate_wind" selected>普通の風</option>
+                            <option value="strong_wind">強い風</option>
+                            <option value="flag">旗</option>
+                            <option value="curtain">カーテン</option>
+                            <option value="underwater">水中</option>
+                        </select>
+                    </div>
+
+                    <div class="property-row">
+                        <label>分割数: <span id="divisionsValue">15</span></label>
+                        <input type="range" id="divisionsSlider" min="1" max="50" value="15" step="1">
+                    </div>
+
+                    <div class="property-row">
+                        <label>揺れ角度: <span id="angleValue">30</span>°</label>
+                        <input type="range" id="angleSlider" min="0" max="360" value="30" step="1">
+                    </div>
+
+                    <div class="property-row">
+                        <label>揺れ周期: <span id="periodValue">2.0</span>秒</label>
+                        <input type="range" id="periodSlider" min="0.1" max="10" value="2.0" step="0.1">
+                    </div>
+
+                    <div class="property-row">
+                        <label>揺れズレ: <span id="phaseShiftValue">90</span>°</label>
+                        <input type="range" id="phaseShiftSlider" min="-360" max="360" value="90" step="1">
+                    </div>
+
+                    <div class="property-row">
+                        <label>センター: <span id="centerValue">0</span>°</label>
+                        <input type="range" id="centerSlider" min="-180" max="180" value="0" step="1">
+                    </div>
+
+                    <div class="property-row">
+                        <label>上固定: <span id="topFixedValue">10</span>%</label>
+                        <input type="range" id="topFixedSlider" min="0" max="100" value="10" step="1">
+                    </div>
+
+                    <div class="property-row">
+                        <label>下固定: <span id="bottomFixedValue">10</span>%</label>
+                        <input type="range" id="bottomFixedSlider" min="0" max="100" value="10" step="1">
+                    </div>
+
+                    <div class="property-row">
+                        <label>
+                            <input type="checkbox" id="fromBottomCheck">
+                            下から揺れる
+                        </label>
+                    </div>
+
+                    <div class="property-row">
+                        <label>
+                            <input type="checkbox" id="randomSwingCheck" checked>
+                            ランダム揺れ
+                        </label>
+                    </div>
+
+                    <div class="property-row">
+                        <label>ランダムパターン: <span id="randomPatternValue">5</span></label>
+                        <input type="range" id="randomPatternSlider" min="0" max="50" value="5" step="1">
+                    </div>
+
+                    <div class="property-row">
+                        <label>シード値: <span id="seedValue">12345</span></label>
+                        <input type="range" id="seedSlider" min="1" max="99999" value="12345" step="1">
+                    </div>
+
+                    <div class="property-divider"></div>
+
+                    <div class="property-row">
+                        <label>
+                            <input type="checkbox" id="pinModeCheck">
+                            📍 ピンモード（複数配置可能）
+                        </label>
+                    </div>
+
+                    <div id="pinModeControls" style="display: none;">
+                        <div class="property-row">
+                            <button id="addPinBtn" class="axis-button">➕ 画像をクリックしてピンを追加</button>
+                        </div>
+
+                        <div class="property-row">
+                            <label>影響範囲: <span id="pinRangeValue">20</span>%</label>
+                            <input type="range" id="pinRangeSlider" min="1" max="50" value="20" step="1">
+                            <small>ピンから何%の範囲を固定するか</small>
+                        </div>
+
+                        <div id="pinList" class="pin-list"></div>
+                    </div>
+                </div>
+
+                <!-- 書き出し設定 -->
+                <div class="property-section">
+                    <h3>💾 書き出し設定</h3>
+                    <div class="property-row">
+                        <label>解像度:</label>
+                        <select id="resolutionSelect">
+                            <option value="original">原寸 (最大画像サイズ)</option>
+                            <option value="1920x1080" selected>1920×1080 (Full HD)</option>
+                            <option value="1280x720">1280×720 (HD)</option>
+                            <option value="custom">カスタム</option>
+                        </select>
+                    </div>
+                    <div class="property-row" id="customResolutionRow" style="display: none;">
+                        <label>幅:</label>
+                        <input type="number" id="customWidthInput" value="1920" min="1">
+                        <label>高さ:</label>
+                        <input type="number" id="customHeightInput" value="1080" min="1">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ファイル入力 (hidden) -->
+    <input type="file" id="imageInput" accept="image/*" multiple style="display: none;">
+
+    <!-- 書き出しプログレス -->
+    <div id="exportProgressModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>書き出し中...</h2>
+            <div class="progress-container">
+                <div class="progress-bar" id="exportProgressBar"></div>
+            </div>
+            <p id="exportProgressText">0 / 0 フレーム</p>
+            <button id="cancelExportBtn" class="secondary-button">キャンセル</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
