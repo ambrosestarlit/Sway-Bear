@@ -53,8 +53,8 @@ body {
 }
 
 .title-icon {
-  width: 40px;        /* 好きなサイズ */
-  height: 40px;       /* 好きなサイズ（autoにすればアスペクト比維持） */
+  width: 30px;        /* 好きなサイズ */
+  height: 30px;       /* 好きなサイズ（autoにすればアスペクト比維持） */
   vertical-align: middle;  /* 文字と縦位置を揃える */
   margin-right: 8px;       /* 文字との間隔 */
   /* 風揺れアニメーションを後でつけたいならここにanimationも書ける */
