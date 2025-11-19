@@ -51,6 +51,15 @@ body {
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
 }
 
+.title-icon {
+  width: 24px;        /* 好きなサイズ */
+  height: 24px;       /* 好きなサイズ（autoにすればアスペクト比維持） */
+  vertical-align: middle;  /* 文字と縦位置を揃える */
+  margin-right: 8px;       /* 文字との間隔 */
+  /* 風揺れアニメーションを後でつけたいならここにanimationも書ける */
+}
+
+
 .header-controls {
     display: flex;
     gap: 10px;
