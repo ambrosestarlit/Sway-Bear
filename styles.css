@@ -1,4 +1,9 @@
-/* チョコレート＆ビスケットテーマ */
+/* チョコレート&ビスケットテーマ */
+@font-face {
+    font-family: 'JK Maru Gothic';
+    src: url('JK-Maru-Gothic-M.otf') format('opentype');
+}
+
 :root {
     --chocolate-dark: #3E2723;
     --chocolate-medium: #5D4037;
@@ -20,10 +25,24 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'JK Maru Gothic', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, var(--chocolate-dark) 0%, var(--chocolate-medium) 100%);
     color: var(--text-light);
     overflow: hidden;
+}
+
+.bear-icon {
+    width: 1.2em;
+    height: 1.2em;
+    vertical-align: middle;
+    margin-right: 0.3em;
+}
+
+.bear-icon-small {
+    width: 1em;
+    height: 1em;
+    vertical-align: middle;
+    margin-right: 0.3em;
 }
 
 .app-container {
@@ -49,6 +68,8 @@ body {
     font-weight: bold;
     color: var(--cream);
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
 }
 
 .header-controls {
@@ -240,6 +261,8 @@ body {
     margin-bottom: 15px;
     border-bottom: 2px solid var(--border);
     padding-bottom: 8px;
+    display: flex;
+    align-items: center;
 }
 
 .property-row {
