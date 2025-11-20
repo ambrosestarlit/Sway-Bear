@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>風揺れエフェクト エディター「Sway＊Bear」</title>
+    <title>風揺れエフェクト エディター</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="app-container">
         <!-- ヘッダー -->
         <header class="header">
-            <h1><img src="user-icon.png" alt="くま" class="title-icon">Sway＊Bear</h1>
+            <h1>🍃 風揺れエフェクト エディター</h1>
             <div class="header-controls">
                 <button id="loadImagesBtn" class="primary-button">📁 画像を読み込む</button>
                 <button id="exportBtn" class="primary-button">💾 連番PNG書き出し</button>
@@ -51,11 +51,15 @@
                 <!-- 画像リスト -->
                 <div class="property-section">
                     <h3>🎨 レイヤー</h3>
+                    <div class="layer-actions">
+                        <button id="createFolderBtn" class="layer-action-button" disabled>📁 選択をフォルダにまとめる</button>
+                    </div>
                     <div id="imageList" class="image-list">
                         <p class="empty-message">画像が読み込まれていません</p>
                     </div>
                     <div class="layer-info">
                         <small>💡 下のレイヤーが手前に表示されます</small>
+                        <small>💡 Shift+クリックで複数選択</small>
                     </div>
                 </div>
 

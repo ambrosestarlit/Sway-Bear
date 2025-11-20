@@ -5,11 +5,13 @@ class WindSwayEditor {
         this.canvas = document.getElementById('previewCanvas');
         this.ctx = this.canvas.getContext('2d');
         
-        // 画像データ
-        this.images = [];
-        this.selectedImageIndex = 0;
+        // 画像データ（フォルダ対応）
+        this.layers = []; // { type: 'image'|'folder', ... }
+        this.selectedLayerIndices = []; // 複数選択
+        this.selectedChildLayer = null; // フォルダー内の選択されたレイヤー
         this.draggedIndex = null;
         this.dragOverIndex = null;
+        this.nextLayerId = 0;
         
         // アニメーション設定
         this.fps = 30;
@@ -34,8 +36,8 @@ class WindSwayEditor {
             fromBottom: false,
             randomSwing: true,
             randomPattern: 5,
-            seed: 12345,
-            pins: [] // 複数ピンの配列
+            seed: 12345
+            // pins はレイヤー/フォルダごとに管理
         };
         
         // ピンモード用の状態
@@ -73,6 +75,11 @@ class WindSwayEditor {
         
         document.getElementById('imageInput').addEventListener('change', (e) => {
             this.loadImages(e.target.files);
+        });
+        
+        // フォルダにまとめる
+        document.getElementById('createFolderBtn').addEventListener('click', () => {
+            this.createFolderFromSelection();
         });
         
         // 再生コントロール
@@ -114,46 +121,55 @@ class WindSwayEditor {
         // 風揺れパラメータスライダー
         this.setupSlider('divisions', (value) => {
             this.windShake.divisions = parseInt(value);
+            this.saveCurrentLayerParameters();
             this.updatePreview();
         });
         
         this.setupSlider('angle', (value) => {
             this.windShake.angle = parseFloat(value);
+            this.saveCurrentLayerParameters();
             this.updatePreview();
         });
         
         this.setupSlider('period', (value) => {
             this.windShake.period = parseFloat(value);
+            this.saveCurrentLayerParameters();
             this.updatePreview();
         });
         
         this.setupSlider('phaseShift', (value) => {
             this.windShake.phaseShift = parseFloat(value);
+            this.saveCurrentLayerParameters();
             this.updatePreview();
         });
         
         this.setupSlider('center', (value) => {
             this.windShake.center = parseFloat(value);
+            this.saveCurrentLayerParameters();
             this.updatePreview();
         });
         
         this.setupSlider('topFixed', (value) => {
             this.windShake.topFixed = parseFloat(value);
+            this.saveCurrentLayerParameters();
             this.updatePreview();
         });
         
         this.setupSlider('bottomFixed', (value) => {
             this.windShake.bottomFixed = parseFloat(value);
+            this.saveCurrentLayerParameters();
             this.updatePreview();
         });
         
         this.setupSlider('randomPattern', (value) => {
             this.windShake.randomPattern = parseInt(value);
+            this.saveCurrentLayerParameters();
             this.updatePreview();
         });
         
         this.setupSlider('seed', (value) => {
             this.windShake.seed = parseInt(value);
+            this.saveCurrentLayerParameters();
             this.updatePreview();
         });
         
@@ -165,9 +181,12 @@ class WindSwayEditor {
             
             if (!enabled) {
                 this.pinMode = false;
-                this.windShake.pins = [];
-                this.removeAllPins();
+                // ピンデータは保持する（削除しない）
+                this.removeAllPinElements(); // DOM要素だけを削除
                 document.getElementById('addPinBtn').classList.remove('active');
+            } else {
+                // ピンモード有効化時に現在のレイヤーのピンを表示
+                this.showCurrentLayerPins();
             }
             
             this.updatePreview();
@@ -203,7 +222,7 @@ class WindSwayEditor {
         
         // キャンバスクリックでピンを配置
         this.canvas.addEventListener('click', (e) => {
-            if (this.pinMode && this.images.length > 0) {
+            if (this.pinMode && this.layers.length > 0) {
                 this.addPin(e);
             }
         });
@@ -211,11 +230,13 @@ class WindSwayEditor {
         // チェックボックス
         document.getElementById('fromBottomCheck').addEventListener('change', (e) => {
             this.windShake.fromBottom = e.target.checked;
+            this.saveCurrentLayerParameters();
             this.updatePreview();
         });
         
         document.getElementById('randomSwingCheck').addEventListener('change', (e) => {
             this.windShake.randomSwing = e.target.checked;
+            this.saveCurrentLayerParameters();
             this.updatePreview();
         });
         
@@ -263,7 +284,7 @@ class WindSwayEditor {
     }
     
     async loadImages(files) {
-        const newImages = [];
+        const newLayers = [];
         
         for (const file of files) {
             const img = new Image();
@@ -271,14 +292,32 @@ class WindSwayEditor {
             
             await new Promise((resolve) => {
                 img.onload = () => {
-                    newImages.push({
+                    newLayers.push({
+                        type: 'image',
+                        id: this.nextLayerId++,
                         img: img,
                         name: file.name,
                         width: img.width,
                         height: img.height,
                         url: url,
-                        effectEnabled: false, // デフォルトはエフェクトOFF
-                        visible: true
+                        effectEnabled: false,
+                        pinMode: false,
+                        pins: [], // レイヤー固有のピン配列
+                        visible: true,
+                        // レイヤー固有の風揺れパラメーター
+                        windShake: {
+                            divisions: 15,
+                            angle: 30,
+                            period: 2.0,
+                            phaseShift: 90,
+                            center: 0,
+                            topFixed: 10,
+                            bottomFixed: 10,
+                            fromBottom: false,
+                            randomSwing: true,
+                            randomPattern: 5,
+                            seed: 12345
+                        }
                     });
                     resolve();
                 };
@@ -286,11 +325,12 @@ class WindSwayEditor {
             });
         }
         
-        this.images = this.images.concat(newImages);
+        this.layers = this.layers.concat(newLayers);
         this.updateImageList();
         
-        if (this.images.length > 0) {
-            this.selectedImageIndex = 0;
+        if (this.layers.length > 0 && this.selectedLayerIndices.length === 0) {
+            this.selectedLayerIndices = [0];
+            this.loadCurrentLayerParameters(); // 最初のレイヤーのパラメーターを読み込む
             this.zoomFit();
         }
         
@@ -300,47 +340,245 @@ class WindSwayEditor {
     updateImageList() {
         const imageList = document.getElementById('imageList');
         
-        if (this.images.length === 0) {
+        if (this.layers.length === 0) {
             imageList.innerHTML = '<p class="empty-message">画像が読み込まれていません</p>';
+            document.getElementById('createFolderBtn').disabled = true;
             return;
         }
         
+        // 複数選択ボタンの有効/無効
+        document.getElementById('createFolderBtn').disabled = this.selectedLayerIndices.length < 2;
+        
         imageList.innerHTML = '';
         
-        // 逆順で表示（下のレイヤーが手前）
-        for (let i = this.images.length - 1; i >= 0; i--) {
-            const imageData = this.images[i];
-            const item = document.createElement('div');
-            item.className = 'image-item';
-            item.dataset.index = i;
-            item.draggable = true;
+        // レイヤーを逆順で表示（下のレイヤーが手前）
+        for (let i = this.layers.length - 1; i >= 0; i--) {
+            const layer = this.layers[i];
             
-            if (i === this.selectedImageIndex) {
-                item.classList.add('selected');
+            if (layer.type === 'folder') {
+                this.renderFolderItem(imageList, layer, i);
+            } else {
+                this.renderImageItem(imageList, layer, i);
+            }
+        }
+    }
+    
+    renderFolderItem(container, folder, index) {
+        const folderDiv = document.createElement('div');
+        folderDiv.className = 'folder-item';
+        folderDiv.dataset.index = index;
+        folderDiv.dataset.type = 'folder';
+        folderDiv.draggable = true; // ドラッグ可能にする
+        
+        // 選択されている場合はハイライト
+        const isSelected = this.selectedLayerIndices.includes(index);
+        if (isSelected) {
+            folderDiv.classList.add('multi-selected');
+        }
+        
+        folderDiv.innerHTML = `
+            <div class="folder-header">
+                <span class="folder-toggle ${folder.collapsed ? 'collapsed' : ''}">▼</span>
+                <div class="folder-info">
+                    <div class="folder-name">📁 ${folder.name}</div>
+                    <div class="folder-count">${folder.children.length}個のアイテム</div>
+                </div>
+                <div class="folder-controls">
+                    <div class="folder-effect-toggle">
+                        <input type="checkbox" class="folder-effect-checkbox" data-index="${index}" ${folder.effectEnabled ? 'checked' : ''}>
+                        <label>🍃</label>
+                    </div>
+                    <button class="visibility-toggle ${folder.visible ? '' : 'hidden'}" data-index="${index}" data-type="folder">
+                        ${folder.visible ? '👁️' : '🚫'}
+                    </button>
+                    <button class="ungroup-folder-btn" data-index="${index}" title="フォルダを解除">📂</button>
+                </div>
+            </div>
+            <div class="folder-children ${folder.collapsed ? 'collapsed' : ''}"></div>
+        `;
+        
+        const header = folderDiv.querySelector('.folder-header');
+        const toggle = folderDiv.querySelector('.folder-toggle');
+        const childrenContainer = folderDiv.querySelector('.folder-children');
+        
+        // ドラッグイベント（フォルダー用）
+        folderDiv.addEventListener('dragstart', (e) => {
+            this.draggedIndex = index;
+            folderDiv.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        });
+        
+        folderDiv.addEventListener('dragend', (e) => {
+            folderDiv.classList.remove('dragging');
+            this.draggedIndex = null;
+            this.clearDragOverStyles();
+        });
+        
+        folderDiv.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            
+            if (this.draggedIndex !== null && this.draggedIndex !== index) {
+                this.clearDragOverStyles();
+                folderDiv.classList.add('drag-over');
+                this.dragOverIndex = index;
+            }
+        });
+        
+        folderDiv.addEventListener('dragleave', (e) => {
+            folderDiv.classList.remove('drag-over');
+        });
+        
+        folderDiv.addEventListener('drop', (e) => {
+            e.preventDefault();
+            
+            if (this.draggedIndex !== null && this.draggedIndex !== index) {
+                const draggedItem = this.layers[this.draggedIndex];
+                this.layers.splice(this.draggedIndex, 1);
+                
+                let newIndex = index;
+                if (this.draggedIndex < index) {
+                    newIndex--;
+                }
+                
+                this.layers.splice(newIndex, 0, draggedItem);
+                
+                // 選択インデックスを更新
+                this.selectedLayerIndices = this.selectedLayerIndices.map(i => {
+                    if (i === this.draggedIndex) return newIndex;
+                    if (i > this.draggedIndex && i <= newIndex) return i - 1;
+                    if (i < this.draggedIndex && i >= newIndex) return i + 1;
+                    return i;
+                });
+                
+                this.updateImageList();
+                this.updatePreview();
+            }
+        });
+        
+        // フォルダ折りたたみ
+        toggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            folder.collapsed = !folder.collapsed;
+            toggle.classList.toggle('collapsed');
+            childrenContainer.classList.toggle('collapsed');
+        });
+        
+        // フォルダークリックで選択
+        header.addEventListener('click', (e) => {
+            // チェックボックスやボタンのクリックは除外
+            if (e.target.closest('.folder-effect-toggle') || 
+                e.target.closest('.visibility-toggle') || 
+                e.target.closest('.ungroup-folder-btn') ||
+                e.target.closest('.folder-toggle')) {
+                return;
             }
             
-            item.innerHTML = `
-                <div class="drag-handle">⋮⋮</div>
-                <img src="${imageData.url}" class="image-thumbnail" alt="${imageData.name}">
-                <div class="image-info">
-                    <div class="image-name">${imageData.name}</div>
-                    <div class="image-size">${imageData.width} × ${imageData.height}</div>
+            // トップレベルのフォルダーを選択
+            this.selectedChildLayer = null; // フォルダー内の選択をクリア
+            
+            if (e.shiftKey) {
+                // Shift+クリックで複数選択
+                const idx = this.selectedLayerIndices.indexOf(index);
+                if (idx !== -1) {
+                    this.selectedLayerIndices.splice(idx, 1);
+                } else {
+                    this.selectedLayerIndices.push(index);
+                }
+            } else {
+                // 通常クリックで単一選択
+                this.selectedLayerIndices = [index];
+            }
+            
+            this.updateImageList();
+            
+            // 選択したフォルダーのパラメーターを読み込む
+            this.loadCurrentLayerParameters();
+            
+            // ピンモードが有効な場合、選択したフォルダーのピンを表示
+            if (document.getElementById('pinModeCheck').checked) {
+                this.showCurrentLayerPins();
+                this.updatePinList();
+            }
+        });
+        
+        // フォルダエフェクトチェックボックス
+        const effectCheckbox = folderDiv.querySelector('.folder-effect-checkbox');
+        effectCheckbox.addEventListener('change', (e) => {
+            e.stopPropagation();
+            folder.effectEnabled = e.target.checked;
+            this.updatePreview();
+        });
+        
+        // 表示/非表示トグル
+        const visibilityBtn = folderDiv.querySelector('.visibility-toggle[data-type="folder"]');
+        visibilityBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            folder.visible = !folder.visible;
+            this.updateImageList();
+            this.updatePreview();
+        });
+        
+        // フォルダ解除
+        const ungroupBtn = folderDiv.querySelector('.ungroup-folder-btn');
+        ungroupBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.ungroupFolder(index);
+        });
+        
+        // 子要素をレンダリング
+        for (let i = folder.children.length - 1; i >= 0; i--) {
+            const child = folder.children[i];
+            // フォルダー内のレイヤーにもchildオブジェクトを渡す
+            this.renderImageItem(childrenContainer, child, -1, true, child);
+        }
+        
+        container.appendChild(folderDiv);
+    }
+    
+    renderImageItem(container, imageData, index, isInFolder = false, childLayer = null) {
+        const item = document.createElement('div');
+        item.className = 'image-item';
+        if (!isInFolder) {
+            item.dataset.index = index;
+            item.dataset.type = 'image';
+            item.draggable = true;
+        }
+        
+        // フォルダー内のレイヤーも選択可能にする
+        const actualLayer = childLayer || imageData;
+        const isSelected = !isInFolder && this.selectedLayerIndices.includes(index);
+        const isChildSelected = isInFolder && this.selectedChildLayer === actualLayer;
+        
+        if (isSelected || isChildSelected) {
+            item.classList.add('multi-selected');
+        }
+        
+        item.innerHTML = `
+            ${!isInFolder ? '<div class="drag-handle">⋮⋮</div>' : ''}
+            <img src="${imageData.url}" class="image-thumbnail" alt="${imageData.name}">
+            <div class="image-info">
+                <div class="image-name">${imageData.name}</div>
+                <div class="image-size">${imageData.width} × ${imageData.height}</div>
+            </div>
+            <div class="image-controls">
+                <div class="effect-toggle">
+                    <input type="checkbox" class="effect-checkbox" ${imageData.effectEnabled ? 'checked' : ''}>
+                    <label>🍃 エフェクト</label>
                 </div>
-                <div class="image-controls">
-                    <div class="effect-toggle">
-                        <input type="checkbox" class="effect-checkbox" data-index="${i}" ${imageData.effectEnabled ? 'checked' : ''}>
-                        <label>🍃 エフェクト</label>
-                    </div>
-                    <button class="visibility-toggle ${imageData.visible ? '' : 'hidden'}" data-index="${i}">
+                ${!isInFolder ? `
+                    <button class="visibility-toggle ${imageData.visible ? '' : 'hidden'}" data-index="${index}">
                         ${imageData.visible ? '👁️' : '🚫'}
                     </button>
-                </div>
-                <button class="remove-image-btn" data-index="${i}">×</button>
-            `;
-            
+                ` : ''}
+            </div>
+            ${!isInFolder ? `<button class="remove-image-btn" data-index="${index}">×</button>` : ''}
+        `;
+        
+        if (!isInFolder) {
             // ドラッグイベント
             item.addEventListener('dragstart', (e) => {
-                this.draggedIndex = i;
+                this.draggedIndex = index;
                 item.classList.add('dragging');
                 e.dataTransfer.effectAllowed = 'move';
             });
@@ -355,10 +593,10 @@ class WindSwayEditor {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'move';
                 
-                if (this.draggedIndex !== null && this.draggedIndex !== i) {
+                if (this.draggedIndex !== null && this.draggedIndex !== index) {
                     this.clearDragOverStyles();
                     item.classList.add('drag-over');
-                    this.dragOverIndex = i;
+                    this.dragOverIndex = index;
                 }
             });
             
@@ -369,27 +607,24 @@ class WindSwayEditor {
             item.addEventListener('drop', (e) => {
                 e.preventDefault();
                 
-                if (this.draggedIndex !== null && this.draggedIndex !== i) {
-                    // 配列内で要素を移動
-                    const draggedItem = this.images[this.draggedIndex];
-                    this.images.splice(this.draggedIndex, 1);
+                if (this.draggedIndex !== null && this.draggedIndex !== index) {
+                    const draggedItem = this.layers[this.draggedIndex];
+                    this.layers.splice(this.draggedIndex, 1);
                     
-                    // ドロップ位置を調整
-                    let newIndex = i;
-                    if (this.draggedIndex < i) {
+                    let newIndex = index;
+                    if (this.draggedIndex < index) {
                         newIndex--;
                     }
                     
-                    this.images.splice(newIndex, 0, draggedItem);
+                    this.layers.splice(newIndex, 0, draggedItem);
                     
                     // 選択インデックスを更新
-                    if (this.selectedImageIndex === this.draggedIndex) {
-                        this.selectedImageIndex = newIndex;
-                    } else if (this.selectedImageIndex > this.draggedIndex && this.selectedImageIndex <= newIndex) {
-                        this.selectedImageIndex--;
-                    } else if (this.selectedImageIndex < this.draggedIndex && this.selectedImageIndex >= newIndex) {
-                        this.selectedImageIndex++;
-                    }
+                    this.selectedLayerIndices = this.selectedLayerIndices.map(i => {
+                        if (i === this.draggedIndex) return newIndex;
+                        if (i > this.draggedIndex && i <= newIndex) return i - 1;
+                        if (i < this.draggedIndex && i >= newIndex) return i + 1;
+                        return i;
+                    });
                     
                     this.updateImageList();
                     this.updatePreview();
@@ -398,14 +633,39 @@ class WindSwayEditor {
                 this.clearDragOverStyles();
             });
             
-            // クリックでレイヤー選択
+            // クリックで選択（複数選択対応）
             item.addEventListener('click', (e) => {
-                if (!e.target.classList.contains('remove-image-btn') &&
-                    !e.target.classList.contains('visibility-toggle') &&
-                    !e.target.classList.contains('effect-checkbox')) {
-                    this.selectedImageIndex = i;
-                    this.updateImageList();
-                    this.updatePreview();
+                if (e.target.classList.contains('remove-image-btn') ||
+                    e.target.classList.contains('visibility-toggle') ||
+                    e.target.classList.contains('effect-checkbox')) {
+                    return;
+                }
+                
+                // トップレベルのレイヤーを選択
+                this.selectedChildLayer = null; // フォルダー内の選択をクリア
+                
+                if (e.shiftKey) {
+                    // Shift+クリックで複数選択
+                    const idx = this.selectedLayerIndices.indexOf(index);
+                    if (idx !== -1) {
+                        this.selectedLayerIndices.splice(idx, 1);
+                    } else {
+                        this.selectedLayerIndices.push(index);
+                    }
+                } else {
+                    // 通常クリックで単一選択
+                    this.selectedLayerIndices = [index];
+                }
+                
+                this.updateImageList();
+                
+                // 選択したレイヤーのパラメーターを読み込む
+                this.loadCurrentLayerParameters();
+                
+                // ピンモードが有効な場合、選択したレイヤーのピンを表示
+                if (document.getElementById('pinModeCheck').checked) {
+                    this.showCurrentLayerPins();
+                    this.updatePinList();
                 }
             });
             
@@ -413,28 +673,62 @@ class WindSwayEditor {
             const effectCheckbox = item.querySelector('.effect-checkbox');
             effectCheckbox.addEventListener('change', (e) => {
                 e.stopPropagation();
-                this.images[i].effectEnabled = e.target.checked;
+                imageData.effectEnabled = e.target.checked;
                 this.updatePreview();
             });
             
             // 表示/非表示トグル
             const visibilityBtn = item.querySelector('.visibility-toggle');
-            visibilityBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.images[i].visible = !this.images[i].visible;
-                this.updateImageList();
-                this.updatePreview();
-            });
+            if (visibilityBtn) {
+                visibilityBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    imageData.visible = !imageData.visible;
+                    this.updateImageList();
+                    this.updatePreview();
+                });
+            }
             
             // 削除ボタン
             const removeBtn = item.querySelector('.remove-image-btn');
-            removeBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.removeImage(i);
+            if (removeBtn) {
+                removeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.removeImage(index);
+                });
+            }
+        } else {
+            // フォルダ内のアイテム
+            // クリックで選択
+            item.addEventListener('click', (e) => {
+                if (e.target.classList.contains('effect-checkbox')) {
+                    return;
+                }
+                
+                // フォルダー内のレイヤーを選択
+                this.selectedLayerIndices = []; // トップレベルの選択をクリア
+                this.selectedChildLayer = actualLayer;
+                
+                this.updateImageList();
+                
+                // 選択したレイヤーのパラメーターを読み込む
+                this.loadLayerParameters(actualLayer);
+                
+                // ピンモードが有効な場合、選択したレイヤーのピンを表示
+                if (document.getElementById('pinModeCheck').checked) {
+                    this.showLayerPins(actualLayer);
+                    this.updatePinListForLayer(actualLayer);
+                }
             });
             
-            imageList.appendChild(item);
+            const effectCheckbox = item.querySelector('.effect-checkbox');
+            effectCheckbox.addEventListener('change', (e) => {
+                e.stopPropagation();
+                imageData.effectEnabled = e.target.checked;
+                this.updatePreview();
+            });
         }
+        
+        container.appendChild(item);
     }
     
     clearDragOverStyles() {
@@ -442,12 +736,187 @@ class WindSwayEditor {
         items.forEach(item => item.classList.remove('drag-over'));
     }
     
-    removeImage(index) {
-        URL.revokeObjectURL(this.images[index].url);
-        this.images.splice(index, 1);
+    // 現在選択されているレイヤーまたはフォルダを取得
+    getCurrentSelectedLayer() {
+        // フォルダー内のレイヤーが選択されている場合
+        if (this.selectedChildLayer) {
+            return this.selectedChildLayer;
+        }
         
-        if (this.selectedImageIndex >= this.images.length) {
-            this.selectedImageIndex = Math.max(0, this.images.length - 1);
+        // トップレベルのレイヤー/フォルダーが選択されている場合
+        if (this.selectedLayerIndices.length === 0) return null;
+        return this.layers[this.selectedLayerIndices[0]];
+    }
+    
+    // 指定されたレイヤーのパラメーターを読み込む
+    loadLayerParameters(layer) {
+        if (!layer || !layer.windShake) {
+            // デフォルト値を表示
+            this.windShake = {
+                divisions: 15,
+                angle: 30,
+                period: 2.0,
+                phaseShift: 90,
+                center: 0,
+                topFixed: 10,
+                bottomFixed: 10,
+                fromBottom: false,
+                randomSwing: true,
+                randomPattern: 5,
+                seed: 12345
+            };
+        } else {
+            // レイヤーのパラメーターをコピー
+            this.windShake = { ...layer.windShake };
+        }
+        
+        // UIを更新
+        this.updateParameterUI();
+    }
+    
+    // 指定されたレイヤーのピンを表示
+    showLayerPins(layer) {
+        if (!layer || !layer.pins) return;
+        
+        this.removeAllPinElements();
+        
+        for (const pin of layer.pins) {
+            this.addPinElement(pin);
+        }
+    }
+    
+    // 指定されたレイヤーのピンリストを更新
+    updatePinListForLayer(layer) {
+        const pinList = document.getElementById('pinList');
+        
+        if (!layer || !layer.pins || layer.pins.length === 0) {
+            pinList.innerHTML = '<p style="text-align: center; color: var(--biscuit); padding: 10px; font-size: 12px;">ピンが配置されていません</p>';
+            return;
+        }
+        
+        pinList.innerHTML = '';
+        
+        for (const pin of layer.pins) {
+            const item = document.createElement('div');
+            item.className = 'pin-item';
+            
+            item.innerHTML = `
+                <div class="pin-info">
+                    📍 位置: ${Math.round(pin.position)}% / 範囲: ${pin.range}%
+                </div>
+                <button class="remove-pin-btn" data-pin-id="${pin.id}">×</button>
+            `;
+            
+            const removeBtn = item.querySelector('.remove-pin-btn');
+            removeBtn.addEventListener('click', () => {
+                this.removePin(pin.id);
+            });
+            
+            pinList.appendChild(item);
+        }
+    }
+    
+    // 現在のレイヤーのパラメーターをUIに読み込む
+    loadCurrentLayerParameters() {
+        const layer = this.getCurrentSelectedLayer();
+        if (!layer || !layer.windShake) {
+            // デフォルト値を表示
+            this.windShake = {
+                divisions: 15,
+                angle: 30,
+                period: 2.0,
+                phaseShift: 90,
+                center: 0,
+                topFixed: 10,
+                bottomFixed: 10,
+                fromBottom: false,
+                randomSwing: true,
+                randomPattern: 5,
+                seed: 12345
+            };
+        } else {
+            // レイヤーのパラメーターをコピー
+            this.windShake = { ...layer.windShake };
+        }
+        
+        // UIを更新
+        this.updateParameterUI();
+    }
+    
+    // パラメーターUIを更新
+    updateParameterUI() {
+        document.getElementById('divisionsSlider').value = this.windShake.divisions;
+        document.getElementById('divisionsValue').textContent = this.windShake.divisions;
+        
+        document.getElementById('angleSlider').value = this.windShake.angle;
+        document.getElementById('angleValue').textContent = this.windShake.angle;
+        
+        document.getElementById('periodSlider').value = this.windShake.period;
+        document.getElementById('periodValue').textContent = this.windShake.period.toFixed(1);
+        
+        document.getElementById('phaseShiftSlider').value = this.windShake.phaseShift;
+        document.getElementById('phaseShiftValue').textContent = this.windShake.phaseShift;
+        
+        document.getElementById('centerSlider').value = this.windShake.center;
+        document.getElementById('centerValue').textContent = this.windShake.center;
+        
+        document.getElementById('topFixedSlider').value = this.windShake.topFixed;
+        document.getElementById('topFixedValue').textContent = this.windShake.topFixed;
+        
+        document.getElementById('bottomFixedSlider').value = this.windShake.bottomFixed;
+        document.getElementById('bottomFixedValue').textContent = this.windShake.bottomFixed;
+        
+        document.getElementById('fromBottomCheck').checked = this.windShake.fromBottom;
+        document.getElementById('randomSwingCheck').checked = this.windShake.randomSwing;
+        
+        document.getElementById('randomPatternSlider').value = this.windShake.randomPattern;
+        document.getElementById('randomPatternValue').textContent = this.windShake.randomPattern;
+        
+        document.getElementById('seedSlider').value = this.windShake.seed;
+        document.getElementById('seedValue').textContent = this.windShake.seed;
+    }
+    
+    // 現在のレイヤーのパラメーターを保存
+    saveCurrentLayerParameters() {
+        const layer = this.getCurrentSelectedLayer();
+        if (!layer) return;
+        
+        // レイヤーにパラメーターを保存
+        layer.windShake = { ...this.windShake };
+    }
+    
+    // 現在のレイヤーのピンを表示
+    showCurrentLayerPins() {
+        const layer = this.getCurrentSelectedLayer();
+        if (!layer || !layer.pins) return;
+        
+        this.removeAllPinElements();
+        
+        for (const pin of layer.pins) {
+            this.addPinElement(pin);
+        }
+    }
+    
+    // すべてのピンDOM要素を削除（データは保持）
+    removeAllPinElements() {
+        this.pinElements.forEach(el => el.remove());
+        this.pinElements = [];
+        
+        const pinList = document.getElementById('pinList');
+        pinList.innerHTML = '<p>ピンが配置されていません</p>';
+    }
+    
+    removeImage(index) {
+        URL.revokeObjectURL(this.layers[index].url);
+        this.layers.splice(index, 1);
+        
+        // 選択インデックスを更新
+        this.selectedLayerIndices = this.selectedLayerIndices
+            .map(i => i > index ? i - 1 : i)
+            .filter(i => i !== index && i < this.layers.length);
+        
+        if (this.selectedLayerIndices.length === 0 && this.layers.length > 0) {
+            this.selectedLayerIndices = [Math.max(0, this.layers.length - 1)];
         }
         
         this.updateImageList();
@@ -456,7 +925,7 @@ class WindSwayEditor {
     
     play() {
         if (this.isPlaying) return;
-        if (this.images.length === 0) return;
+        if (this.layers.length === 0) return;
         
         this.isPlaying = true;
         this.lastFrameTime = performance.now();
@@ -518,7 +987,8 @@ class WindSwayEditor {
     }
     
     zoomFit() {
-        if (this.images.length === 0) return;
+        const flatLayers = this.getFlattenedLayers();
+        if (flatLayers.length === 0) return;
         
         const container = document.getElementById('canvasContainer');
         const containerWidth = container.clientWidth;
@@ -527,10 +997,10 @@ class WindSwayEditor {
         // 最大画像サイズを計算
         let maxWidth = 0;
         let maxHeight = 0;
-        for (const imageData of this.images) {
-            if (imageData.visible) {
-                maxWidth = Math.max(maxWidth, imageData.width);
-                maxHeight = Math.max(maxHeight, imageData.height);
+        for (const layer of flatLayers) {
+            if (layer.visible) {
+                maxWidth = Math.max(maxWidth, layer.width);
+                maxHeight = Math.max(maxHeight, layer.height);
             }
         }
         
@@ -538,7 +1008,7 @@ class WindSwayEditor {
         
         const scaleX = containerWidth / maxWidth;
         const scaleY = containerHeight / maxHeight;
-        const scale = Math.min(scaleX, scaleY) * 0.9; // 90%にフィット
+        const scale = Math.min(scaleX, scaleY) * 0.9;
         
         this.setZoom(scale);
     }
@@ -548,6 +1018,14 @@ class WindSwayEditor {
     }
     
     addPin(e) {
+        if (this.layers.length === 0) return;
+        
+        const layer = this.getCurrentSelectedLayer();
+        if (!layer) {
+            alert('レイヤーを選択してください');
+            return;
+        }
+        
         const rect = this.canvas.getBoundingClientRect();
         const scaleX = this.canvas.width / rect.width;
         const scaleY = this.canvas.height / rect.height;
@@ -567,10 +1045,11 @@ class WindSwayEditor {
             y: y
         };
         
-        this.windShake.pins.push(pin);
+        // 現在のレイヤー/フォルダにピンを追加
+        layer.pins.push(pin);
         
         // 視覚的にピンを表示
-        this.showPin(pin);
+        this.addPinElement(pin);
         
         // ピンリストを更新
         this.updatePinList();
@@ -579,12 +1058,17 @@ class WindSwayEditor {
         this.updatePreview();
     }
     
-    showPin(pin) {
+    addPinElement(pin) {
         const container = document.getElementById('canvasContainer');
-        const pinElement = document.createElement('div');
+        const pinElement = document.createElement('img');
         pinElement.className = 'axis-pin';
-        pinElement.innerHTML = '📍';
-        pinElement.style.fontSize = '30px';
+        
+        // ランダムにクマの色を選択
+        const colors = ['01', '02', '03', '04', '05'];
+        const randomColor = colors[Math.floor(Math.random() * colors.length)];
+        pinElement.src = `pins/papet-${randomColor}.png`;
+        pinElement.style.width = '40px';
+        pinElement.style.height = '40px';
         pinElement.dataset.pinId = pin.id;
         
         // キャンバスの位置とズームを考慮して配置
@@ -605,10 +1089,13 @@ class WindSwayEditor {
     }
     
     removePin(pinId) {
+        const layer = this.getCurrentSelectedLayer();
+        if (!layer || !layer.pins) return;
+        
         // データから削除
-        const index = this.windShake.pins.findIndex(p => p.id === pinId);
+        const index = layer.pins.findIndex(p => p.id === pinId);
         if (index !== -1) {
-            this.windShake.pins.splice(index, 1);
+            layer.pins.splice(index, 1);
         }
         
         // DOM要素を削除
@@ -633,15 +1120,16 @@ class WindSwayEditor {
     
     updatePinList() {
         const pinList = document.getElementById('pinList');
+        const layer = this.getCurrentSelectedLayer();
         
-        if (this.windShake.pins.length === 0) {
+        if (!layer || !layer.pins || layer.pins.length === 0) {
             pinList.innerHTML = '<p style="text-align: center; color: var(--biscuit); padding: 10px; font-size: 12px;">ピンが配置されていません</p>';
             return;
         }
         
         pinList.innerHTML = '';
         
-        for (const pin of this.windShake.pins) {
+        for (const pin of layer.pins) {
             const item = document.createElement('div');
             item.className = 'pin-item';
             
@@ -662,50 +1150,143 @@ class WindSwayEditor {
     }
     
     updatePreview() {
-        if (this.images.length === 0) {
+        const flatLayers = this.getFlattenedLayers();
+        
+        if (flatLayers.length === 0) {
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
             return;
         }
         
-        // 最大サイズを計算
-        let maxWidth = 0;
-        let maxHeight = 0;
-        for (const imageData of this.images) {
-            if (imageData.visible) {
-                maxWidth = Math.max(maxWidth, imageData.width);
-                maxHeight = Math.max(maxHeight, imageData.height);
+        // 揺れの角度から最大バウンディングボックスを計算
+        let maxCanvasWidth = 0;
+        let maxCanvasHeight = 0;
+        
+        for (const layer of flatLayers) {
+            if (!layer.visible) continue;
+            
+            let currentWidth = layer.width;
+            let currentHeight = layer.height;
+            
+            // レイヤー自身のエフェクトの最大範囲
+            if (layer.effectEnabled && layer.windShake) {
+                const angle = layer.windShake.angle || 0;
+                const angleRad = angle * Math.PI / 180;
+                const maxSwayWidth = currentHeight * Math.sin(angleRad);
+                currentWidth = layer.width + Math.abs(maxSwayWidth) * 2;
+                currentHeight = layer.height * 1.1; // 縦方向の余裕
             }
+            
+            // 親フォルダーのエフェクトの最大範囲
+            if (layer.parentFolders && layer.parentFolders.length > 0) {
+                for (const folder of layer.parentFolders) {
+                    if (folder.effectEnabled && folder.windShake) {
+                        const angle = folder.windShake.angle || 0;
+                        const angleRad = angle * Math.PI / 180;
+                        const maxSwayWidth = currentHeight * Math.sin(angleRad);
+                        currentWidth += Math.abs(maxSwayWidth) * 2;
+                        currentHeight *= 1.1;
+                    }
+                }
+            }
+            
+            // padding を追加
+            const padding = 200;
+            currentWidth += padding;
+            currentHeight += padding;
+            
+            maxCanvasWidth = Math.max(maxCanvasWidth, currentWidth);
+            maxCanvasHeight = Math.max(maxCanvasHeight, currentHeight);
         }
         
-        if (maxWidth === 0 || maxHeight === 0) {
-            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            return;
-        }
-        
-        // キャンバスサイズを最大画像サイズに合わせる
-        this.canvas.width = maxWidth;
-        this.canvas.height = maxHeight;
+        // キャンバスサイズを最大範囲に設定
+        this.canvas.width = Math.ceil(maxCanvasWidth);
+        this.canvas.height = Math.ceil(maxCanvasHeight);
         
         // 背景をクリア
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // レイヤーを順番に描画（配列の順番通り、最初の要素が奥、最後の要素が手前）
-        for (let i = 0; i < this.images.length; i++) {
-            const imageData = this.images[i];
+        // レイヤーを順番に描画
+        for (const layer of flatLayers) {
+            if (!layer.visible) continue;
             
-            if (!imageData.visible) continue;
-            
-            const img = imageData.img;
+            const img = layer.img;
             
             this.ctx.save();
             this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
             
-            // エフェクトが有効な場合は風揺れを適用、無効な場合は通常描画
-            if (imageData.effectEnabled) {
-                this.applyWindShakeWebGL(this.ctx, img, imageData.width, imageData.height, this.currentTime);
+            // エフェクトなしの場合はそのまま描画
+            if (!layer.effectEnabled && (!layer.parentFolders || layer.parentFolders.length === 0 || !layer.parentFolders.some(f => f.effectEnabled))) {
+                this.ctx.drawImage(img, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
             } else {
-                // 中央に配置して通常描画
-                this.ctx.drawImage(img, -imageData.width / 2, -imageData.height / 2, imageData.width, imageData.height);
+                // エフェクトありの場合は、applyWindShakeWebGLが直接描画
+                let currentImg = img;
+                let currentWidth = layer.width;
+                let currentHeight = layer.height;
+                
+                // レイヤー自身のエフェクト
+                if (layer.effectEnabled) {
+                    this.applyWindShakeWebGL(this.ctx, currentImg, currentWidth, currentHeight, this.currentTime, layer);
+                    
+                    // 次のエフェクトのために、結果をキャプチャ
+                    if (layer.parentFolders && layer.parentFolders.some(f => f.effectEnabled)) {
+                        // 親フォルダーのエフェクトもある場合は、現在の結果を一時キャンバスに保存
+                        const ws = {
+                            ...(layer.windShake || this.windShake),
+                            pins: layer.pins || []
+                        };
+                        const meshData = this.createWindShakeMeshWithBounds(ws, currentWidth, currentHeight, this.currentTime);
+                        const padding = 200;
+                        const resultWidth = meshData.bounds.width * 1.2 + padding * 2;
+                        const resultHeight = meshData.bounds.height * 1.2 + padding * 2;
+                        
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = resultWidth;
+                        tempCanvas.height = resultHeight;
+                        const tempCtx = tempCanvas.getContext('2d');
+                        tempCtx.translate(tempCanvas.width / 2, tempCanvas.height / 2);
+                        this.applyWindShakeWebGL(tempCtx, currentImg, currentWidth, currentHeight, this.currentTime, layer);
+                        
+                        currentImg = tempCanvas;
+                        currentWidth = resultWidth;
+                        currentHeight = resultHeight;
+                    } else {
+                        this.ctx.restore();
+                        continue;
+                    }
+                }
+                
+                // 親フォルダーのエフェクトを順番に適用
+                if (layer.parentFolders && layer.parentFolders.length > 0) {
+                    for (const folder of layer.parentFolders) {
+                        if (folder.effectEnabled) {
+                            if (layer.parentFolders.indexOf(folder) === layer.parentFolders.length - 1) {
+                                // 最後のフォルダーは直接描画
+                                this.applyWindShakeWebGL(this.ctx, currentImg, currentWidth, currentHeight, this.currentTime, folder);
+                            } else {
+                                // 途中のフォルダーは一時キャンバスに描画
+                                const ws = {
+                                    ...(folder.windShake || this.windShake),
+                                    pins: folder.pins || []
+                                };
+                                const meshData = this.createWindShakeMeshWithBounds(ws, currentWidth, currentHeight, this.currentTime);
+                                const padding = 200;
+                                const resultWidth = meshData.bounds.width * 1.2 + padding * 2;
+                                const resultHeight = meshData.bounds.height * 1.2 + padding * 2;
+                                
+                                const tempCanvas = document.createElement('canvas');
+                                tempCanvas.width = resultWidth;
+                                tempCanvas.height = resultHeight;
+                                const tempCtx = tempCanvas.getContext('2d');
+                                tempCtx.translate(tempCanvas.width / 2, tempCanvas.height / 2);
+                                this.applyWindShakeWebGL(tempCtx, currentImg, currentWidth, currentHeight, this.currentTime, folder);
+                                
+                                currentImg = tempCanvas;
+                                currentWidth = resultWidth;
+                                currentHeight = resultHeight;
+                            }
+                        }
+                    }
+                }
             }
             
             this.ctx.restore();
@@ -713,7 +1294,7 @@ class WindSwayEditor {
     }
     
     // WebGLで風揺れエフェクトを適用
-    applyWindShakeWebGL(ctx, img, width, height, localTime) {
+    applyWindShakeWebGL(ctx, img, width, height, localTime, layer) {
         // 一時キャンバスでWebGL処理
         if (!this.windShakeCanvas) {
             this.windShakeCanvas = document.createElement('canvas');
@@ -727,15 +1308,19 @@ class WindSwayEditor {
         const gl = this.windShakeGL;
         const canvas = this.windShakeCanvas;
         
-        const ws = this.windShake;
+        // レイヤー固有のwindShakeパラメーターとピンを使用
+        const ws = {
+            ...(layer.windShake || this.windShake), // レイヤーのパラメーターを優先
+            pins: layer.pins || [] // レイヤー固有のピン
+        };
         
         // メッシュを生成してバウンディングボックスを取得
         const meshData = this.createWindShakeMeshWithBounds(ws, width, height, localTime);
         
         // バウンディングボックスのサイズを計算（余裕を持たせる）
-        const padding = 100;
-        const canvasWidth = meshData.bounds.width + padding * 2;
-        const canvasHeight = meshData.bounds.height + padding * 2;
+        const padding = 200;
+        const canvasWidth = meshData.bounds.width * 1.2 + padding * 2; // 1.2倍して余裕を持たせる
+        const canvasHeight = meshData.bounds.height * 1.2 + padding * 2;
         
         // キャンバスサイズを設定
         canvas.width = canvasWidth;
@@ -1195,11 +1780,12 @@ class WindSwayEditor {
         
         if (resolution === 'original') {
             // 最大画像サイズを使用
+            const flatLayers = this.getFlattenedLayers();
             let maxWidth = 0;
             let maxHeight = 0;
-            for (const imageData of this.images) {
-                maxWidth = Math.max(maxWidth, imageData.width);
-                maxHeight = Math.max(maxHeight, imageData.height);
+            for (const layer of flatLayers) {
+                maxWidth = Math.max(maxWidth, layer.width);
+                maxHeight = Math.max(maxHeight, layer.height);
             }
             return { width: maxWidth, height: maxHeight };
         } else if (resolution === '1920x1080') {
@@ -1218,7 +1804,9 @@ class WindSwayEditor {
     
     // 連番PNG書き出し
     async exportSequence() {
-        if (this.images.length === 0) {
+        const flatLayers = this.getFlattenedLayers();
+        
+        if (flatLayers.length === 0) {
             alert('画像が読み込まれていません。');
             return;
         }
@@ -1253,14 +1841,45 @@ class WindSwayEditor {
             // キャンバスをクリア
             exportCtx.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
             
-            // 最大画像サイズを計算
+            // 最大画像サイズを計算（揺れの角度から最大範囲を計算）
             let maxWidth = 0;
             let maxHeight = 0;
-            for (const imageData of this.images) {
-                if (imageData.visible) {
-                    maxWidth = Math.max(maxWidth, imageData.width);
-                    maxHeight = Math.max(maxHeight, imageData.height);
+            
+            for (const layer of flatLayers) {
+                if (!layer.visible) continue;
+                
+                let layerWidth = layer.width;
+                let layerHeight = layer.height;
+                
+                // エフェクトが有効な場合、揺れの角度から最大範囲を計算
+                if (layer.effectEnabled && layer.windShake) {
+                    const angle = layer.windShake.angle || 0;
+                    const angleRad = angle * Math.PI / 180;
+                    const maxSwayWidth = layerHeight * Math.sin(angleRad);
+                    layerWidth = layer.width + Math.abs(maxSwayWidth) * 2;
+                    layerHeight = layer.height * 1.1;
                 }
+                
+                // 親フォルダーのエフェクトも考慮
+                if (layer.parentFolders && layer.parentFolders.length > 0) {
+                    for (const folder of layer.parentFolders) {
+                        if (folder.effectEnabled && folder.windShake) {
+                            const angle = folder.windShake.angle || 0;
+                            const angleRad = angle * Math.PI / 180;
+                            const maxSwayWidth = layerHeight * Math.sin(angleRad);
+                            layerWidth += Math.abs(maxSwayWidth) * 2;
+                            layerHeight *= 1.1;
+                        }
+                    }
+                }
+                
+                // padding を追加
+                const padding = 200;
+                layerWidth += padding;
+                layerHeight += padding;
+                
+                maxWidth = Math.max(maxWidth, layerWidth);
+                maxHeight = Math.max(maxHeight, layerHeight);
             }
             
             if (maxWidth === 0 || maxHeight === 0) continue;
@@ -1271,25 +1890,87 @@ class WindSwayEditor {
             );
             
             // 全レイヤーを順番に描画
-            for (let i = 0; i < this.images.length; i++) {
-                const imageData = this.images[i];
+            for (const layer of flatLayers) {
+                if (!layer.visible) continue;
                 
-                if (!imageData.visible) continue;
-                
-                const img = imageData.img;
+                const img = layer.img;
                 
                 exportCtx.save();
                 exportCtx.translate(resolution.width / 2, resolution.height / 2);
+                exportCtx.scale(scale, scale);
                 
-                if (imageData.effectEnabled) {
-                    // 風揺れエフェクトを適用（スケールを考慮）
-                    exportCtx.scale(scale, scale);
-                    this.applyWindShakeWebGL(exportCtx, img, imageData.width, imageData.height, time);
+                // エフェクトなしの場合はそのまま描画
+                if (!layer.effectEnabled && (!layer.parentFolders || layer.parentFolders.length === 0 || !layer.parentFolders.some(f => f.effectEnabled))) {
+                    exportCtx.drawImage(img, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
                 } else {
-                    // 通常描画
-                    const scaledWidth = imageData.width * scale;
-                    const scaledHeight = imageData.height * scale;
-                    exportCtx.drawImage(img, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+                    // エフェクトありの場合
+                    let currentImg = img;
+                    let currentWidth = layer.width;
+                    let currentHeight = layer.height;
+                    
+                    // レイヤー自身のエフェクト
+                    if (layer.effectEnabled) {
+                        this.applyWindShakeWebGL(exportCtx, currentImg, currentWidth, currentHeight, time, layer);
+                        
+                        // 親フォルダーのエフェクトもある場合は、結果をキャプチャ
+                        if (layer.parentFolders && layer.parentFolders.some(f => f.effectEnabled)) {
+                            const ws = {
+                                ...(layer.windShake || this.windShake),
+                                pins: layer.pins || []
+                            };
+                            const meshData = this.createWindShakeMeshWithBounds(ws, currentWidth, currentHeight, time);
+                            const padding = 200;
+                            const resultWidth = meshData.bounds.width * 1.2 + padding * 2;
+                            const resultHeight = meshData.bounds.height * 1.2 + padding * 2;
+                            
+                            const tempCanvas = document.createElement('canvas');
+                            tempCanvas.width = resultWidth;
+                            tempCanvas.height = resultHeight;
+                            const tempCtx = tempCanvas.getContext('2d');
+                            tempCtx.translate(tempCanvas.width / 2, tempCanvas.height / 2);
+                            this.applyWindShakeWebGL(tempCtx, currentImg, currentWidth, currentHeight, time, layer);
+                            
+                            currentImg = tempCanvas;
+                            currentWidth = resultWidth;
+                            currentHeight = resultHeight;
+                        } else {
+                            exportCtx.restore();
+                            continue;
+                        }
+                    }
+                    
+                    // 親フォルダーのエフェクトを順番に適用
+                    if (layer.parentFolders && layer.parentFolders.length > 0) {
+                        for (const folder of layer.parentFolders) {
+                            if (folder.effectEnabled) {
+                                if (layer.parentFolders.indexOf(folder) === layer.parentFolders.length - 1) {
+                                    // 最後のフォルダーは直接描画
+                                    this.applyWindShakeWebGL(exportCtx, currentImg, currentWidth, currentHeight, time, folder);
+                                } else {
+                                    // 途中のフォルダーは一時キャンバスに描画
+                                    const ws = {
+                                        ...(folder.windShake || this.windShake),
+                                        pins: folder.pins || []
+                                    };
+                                    const meshData = this.createWindShakeMeshWithBounds(ws, currentWidth, currentHeight, time);
+                                    const padding = 200;
+                                    const resultWidth = meshData.bounds.width * 1.2 + padding * 2;
+                                    const resultHeight = meshData.bounds.height * 1.2 + padding * 2;
+                                    
+                                    const tempCanvas = document.createElement('canvas');
+                                    tempCanvas.width = resultWidth;
+                                    tempCanvas.height = resultHeight;
+                                    const tempCtx = tempCanvas.getContext('2d');
+                                    tempCtx.translate(tempCanvas.width / 2, tempCanvas.height / 2);
+                                    this.applyWindShakeWebGL(tempCtx, currentImg, currentWidth, currentHeight, time, folder);
+                                    
+                                    currentImg = tempCanvas;
+                                    currentWidth = resultWidth;
+                                    currentHeight = resultHeight;
+                                }
+                            }
+                        }
+                    }
                 }
                 
                 exportCtx.restore();
@@ -1332,6 +2013,104 @@ class WindSwayEditor {
     
     cancelExport() {
         this.exportCancelled = true;
+    }
+    
+    // レイヤーをフラットに展開（レンダリング用）
+    getFlattenedLayers() {
+        const flattened = [];
+        
+        const traverse = (layers, parentFolders) => {
+            for (const layer of layers) {
+                if (layer.type === 'folder') {
+                    if (layer.visible) {
+                        // フォルダ情報を親フォルダリストに追加
+                        const newParentFolders = [...parentFolders, layer];
+                        traverse(layer.children, newParentFolders);
+                    }
+                } else if (layer.type === 'image') {
+                    if (layer.visible) {
+                        flattened.push({
+                            ...layer,
+                            parentFolders: parentFolders // 親フォルダのリストを保持
+                        });
+                    }
+                }
+            }
+        };
+        
+        traverse(this.layers, []);
+        return flattened;
+    }
+    
+    // フォルダにまとめる機能
+    createFolderFromSelection() {
+        if (this.selectedLayerIndices.length < 2) {
+            alert('2つ以上のレイヤーを選択してください');
+            return;
+        }
+        
+        // 選択されたレイヤーを取得
+        const selectedLayers = this.selectedLayerIndices
+            .map(index => ({ index, layer: this.layers[index] }))
+            .sort((a, b) => a.index - b.index);
+        
+        // フォルダを作成
+        const folder = {
+            type: 'folder',
+            id: this.nextLayerId++,
+            name: 'フォルダ ' + (this.layers.filter(l => l.type === 'folder').length + 1),
+            children: selectedLayers.map(item => item.layer),
+            effectEnabled: false,
+            pinMode: false,
+            pins: [], // フォルダ固有のピン配列
+            visible: true,
+            collapsed: false,
+            // フォルダ固有の風揺れパラメーター
+            windShake: {
+                divisions: 15,
+                angle: 30,
+                period: 2.0,
+                phaseShift: 90,
+                center: 0,
+                topFixed: 10,
+                bottomFixed: 10,
+                fromBottom: false,
+                randomSwing: true,
+                randomPattern: 5,
+                seed: 12345
+            }
+        };
+        
+        // 元のレイヤーを削除（後ろから）
+        for (let i = selectedLayers.length - 1; i >= 0; i--) {
+            this.layers.splice(selectedLayers[i].index, 1);
+        }
+        
+        // フォルダを挿入（最初の選択位置に）
+        this.layers.splice(selectedLayers[0].index, 0, folder);
+        
+        // 選択をクリア
+        this.selectedLayerIndices = [];
+        
+        this.updateImageList();
+        this.updatePreview();
+    }
+    
+    // フォルダを解除
+    ungroupFolder(folderIndex) {
+        const folder = this.layers[folderIndex];
+        if (folder.type !== 'folder') return;
+        
+        // フォルダを削除
+        this.layers.splice(folderIndex, 1);
+        
+        // 子要素を展開
+        for (let i = 0; i < folder.children.length; i++) {
+            this.layers.splice(folderIndex + i, 0, folder.children[i]);
+        }
+        
+        this.updateImageList();
+        this.updatePreview();
     }
 }
 
